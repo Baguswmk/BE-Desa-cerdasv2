@@ -17,16 +17,17 @@ dotenv.config();
 const app: Application = express();
 
 // Security middleware
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: "cross-origin" },
-}));
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: "cross-origin" },
+  }),
+);
 app.use(
   cors({
-    origin: process.env.CORS_ORIGIN || "https://desa-cerdas.my.id:5858",
+    origin: ["https://desa-cerdas.my.id", "http://localhost:3000"],
     credentials: true,
   }),
 );
-
 // Body parsing middleware
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
