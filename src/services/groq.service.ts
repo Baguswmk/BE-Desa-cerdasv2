@@ -2,7 +2,7 @@ import { Groq } from "groq-sdk";
 import { logger } from "../utils/logger";
 
 const GROQ_API_KEY = process.env.GROQ_API_KEY;
-const GROQ_MODEL = process.env.GROQ_MODEL || "llama3-70b-8192";
+const GROQ_MODEL = process.env.GROQ_MODEL && process.env.GROQ_MODEL !== "llama3-70b-8192" ? process.env.GROQ_MODEL : "llama-3.3-70b-versatile";
 
 let groqClient: Groq | null = null;
 if (GROQ_API_KEY) {

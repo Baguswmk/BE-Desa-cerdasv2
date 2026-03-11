@@ -63,6 +63,29 @@ export const adminController = {
     }
   },
 
+  async createUser(req: Request, res: Response) {
+    try {
+      const adminId = req.user!.userId;
+      const user = await adminService.createUser(req.body, adminId);
+      res.json(successResponse("Pengguna berhasil dibuat", user));
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Terjadi kesalahan";
+      res.status(400).json(errorResponse(message));
+    }
+  },
+
+  async updateUser(req: Request, res: Response) {
+    try {
+      const id = req.params.id as string;
+      const adminId = req.user!.userId;
+      const user = await adminService.updateUser(id, req.body, adminId);
+      res.json(successResponse("Pengguna berhasil diperbarui", user));
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Terjadi kesalahan";
+      res.status(400).json(errorResponse(message));
+    }
+  },
+
   // GAP 6: Export laporan donasi ke Excel atau PDF
   async exportDonations(req: Request, res: Response) {
     try {

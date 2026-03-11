@@ -2,6 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import { logger } from "../utils/logger";
 import ExcelJS from "exceljs";
 import PDFDocument from "pdfkit";
+import bcrypt from "bcrypt";
 
 const prisma = new PrismaClient();
 
@@ -109,6 +110,57 @@ export const adminService = {
       "UPDATE_USER_STATUS",
       `Updated user ${user.email} status to ${status}`,
       { userId, status },
+    );
+
+    return user;
+  },
+
+  async createUser(data: any, adminId: string) {
+    const hashedPassword = await bcrypt.hash(data.password, 10);
+    const user = await prisma.user.create({
+      data: {
+        nama: data.nama,
+        email: data.email,
+        password_hash: hashedPassword,
+        no_hp: data.no_hp || null,
+        role: data.role || "WARGA",
+        status: data.status || "ACTIVE",
+      },
+    });
+
+    await this.logActivity(
+      adminId,
+      "CREATE_USER",
+      `Created new user ${user.email}`,
+      { userId: user.id }
+    );
+
+    return user;
+  },
+
+  async updateUser(userId: string, data: any, adminId: string) {
+    const updateData: any = {
+      nama: data.nama,
+      email: data.email,
+      no_hp: data.no_hp || null,
+      role: data.role,
+      status: data.status,
+    };
+    
+    if (data.password) {
+      updateData.password_hash = await bcrypt.hash(data.password, 10);
+    }
+
+    const user = await prisma.user.update({
+      where: { id: userId },
+      data: updateData,
+    });
+
+    await this.logActivity(
+      adminId,
+      "UPDATE_USER",
+      `Updated user ${user.email}`,
+      { userId: user.id }
     );
 
     return user;
