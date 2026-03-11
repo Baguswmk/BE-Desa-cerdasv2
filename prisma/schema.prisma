@@ -1,0 +1,225 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User Model
+model User {
+  id            String   @id @default(uuid())
+  nama          String
+  email         String   @unique
+  no_hp         String?
+  password_hash String
+  role          Role     @default(WARGA)
+  status        UserStatus @default(ACTIVE)
+  created_at    DateTime @default(now())
+  updated_at    DateTime @updatedAt
+
+  donations     Donation[]
+  ai_queries    AIQuery[]
+  smart_farms   SmartFarm[]
+  farm_chats    FarmChat[]
+
+  @@map("users")
+}
+
+enum Role {
+  ADMIN
+  WARGA
+}
+
+enum UserStatus {
+  ACTIVE
+  BANNED
+}
+
+// Kegiatan (Village Activities) Model
+model Kegiatan {
+  id              String   @id @default(uuid())
+  title           String
+  description     String   @db.Text
+  banner          String?  // Dedicated banner image (separate from gallery)
+  target_amount   Decimal  @db.Decimal(15, 2)
+  current_amount  Decimal  @default(0) @db.Decimal(15, 2)
+  photos          String[] // Array of gallery photo filenames
+  start_date      DateTime
+  end_date        DateTime?
+  status          KegiatanStatus @default(ACTIVE)
+
+  // Lokasi kegiatan
+  village_name     String?  // Nama desa
+  district         String?  // Kecamatan
+  province         String?  // Provinsi
+  google_maps_link String?  // Link Google Maps
+
+  // Jadwal kegiatan - JSON array [{tanggal, waktu, nama_kegiatan}]
+  jadwal          Json?
+
+  // Info pembayaran untuk donasi
+  bank_name            String?
+  bank_account_number  String?
+  bank_account_name    String?
+  qr_image             String?  // QR code image filename
+
+  created_by      String?  // Admin user_id who created
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  donations        Donation[]
+  activity_updates ActivityUpdate[]
+  expense_reports  ExpenseReport[]
+
+  @@map("kegiatan")
+}
+
+// Activity Update (Progress updates for kegiatan)
+model ActivityUpdate {
+  id          String   @id @default(uuid())
+  kegiatan_id String
+  title       String
+  description String   @db.Text
+  photo       String?  // Photo filename
+  created_at  DateTime @default(now())
+
+  kegiatan    Kegiatan @relation(fields: [kegiatan_id], references: [id], onDelete: Cascade)
+
+  @@index([kegiatan_id])
+  @@index([created_at])
+  @@map("activity_updates")
+}
+
+// Expense Report (Transparansi pengeluaran dana)
+model ExpenseReport {
+  id            String   @id @default(uuid())
+  kegiatan_id   String
+  title         String
+  amount        Decimal  @db.Decimal(15, 2)
+  receipt_image String?  // Bukti struk/nota
+  created_at    DateTime @default(now())
+
+  kegiatan      Kegiatan @relation(fields: [kegiatan_id], references: [id], onDelete: Cascade)
+
+  @@index([kegiatan_id])
+  @@map("expense_reports")
+}
+
+enum KegiatanStatus {
+  ACTIVE
+  COMPLETED
+  CANCELLED
+}
+
+// Donation Model
+model Donation {
+  id              String   @id @default(uuid())
+  kegiatan_id     String
+  user_id         String?  // Nullable for guest donations
+  donor_name      String?  // For guest or anonymous donations
+  amount          Decimal  @db.Decimal(15, 2)
+  message         String?  @db.Text  // Pesan dari donatur
+  bukti_transfer  String   // File path
+  status          DonationStatus @default(PENDING)
+  approved_by     String?  // Admin user_id
+  approved_at     DateTime?
+  rejected_reason String?  @db.Text
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  kegiatan        Kegiatan @relation(fields: [kegiatan_id], references: [id], onDelete: Cascade)
+  user            User?    @relation(fields: [user_id], references: [id], onDelete: SetNull)
+
+  @@index([kegiatan_id])
+  @@index([user_id])
+  @@index([status])
+  @@map("donations")
+}
+
+enum DonationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// AI Legal Query Model
+model AIQuery {
+  id          String   @id @default(uuid())
+  user_id     String?  // Nullable for guest queries
+  ip_address  String?  // For guest quota tracking
+  question    String   @db.Text
+  answer      String   @db.Text
+  created_at  DateTime @default(now())
+
+  user        User?    @relation(fields: [user_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id])
+  @@index([ip_address])
+  @@index([created_at])
+  @@map("ai_queries")
+}
+
+// Smart Farm Model
+model SmartFarm {
+  id              String   @id @default(uuid())
+  user_id         String
+  plant_name      String
+  plant_date      DateTime
+  location        String
+  coordinates     String?  // lat,long
+  weather_data    Json?    // Stored weather snapshot
+  ai_analysis     String   @db.Text
+  harvest_estimate DateTime?
+  created_at      DateTime @default(now())
+  updated_at      DateTime @updatedAt
+
+  user            User     @relation(fields: [user_id], references: [id], onDelete: Cascade)
+
+  @@index([user_id])
+  @@map("smart_farms")
+}
+
+// Farm Chat History (conversational AI about farming)
+model FarmChat {
+  id         String   @id @default(uuid())
+  user_id    String?
+  ip_address String?
+  question   String   @db.Text
+  answer     String   @db.Text
+  created_at DateTime @default(now())
+
+  user       User?    @relation(fields: [user_id], references: [id], onDelete: SetNull)
+
+  @@index([user_id])
+  @@index([created_at])
+  @@map("farm_chats")
+}
+
+// Weather Cache Model
+model WeatherCache {
+  id          String   @id @default(uuid())
+  location    String   @unique
+  data        Json
+  cached_at   DateTime @default(now())
+
+  @@map("weather_cache")
+}
+
+// Activity Log Model (for admin actions)
+model ActivityLog {
+  id          String   @id @default(uuid())
+  admin_id    String
+  action      String
+  description String   @db.Text
+  metadata    Json?
+  created_at  DateTime @default(now())
+
+  @@index([admin_id])
+  @@index([created_at])
+  @@map("activity_logs")
+}
