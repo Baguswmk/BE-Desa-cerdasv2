@@ -166,6 +166,22 @@ export const adminService = {
     return user;
   },
 
+  async deleteUser(userId: string, adminId: string) {
+    const user = await prisma.user.findUnique({ where: { id: userId } });
+    if (!user) throw new Error("Pengguna tidak ditemukan");
+
+    await prisma.user.delete({ where: { id: userId } });
+
+    await this.logActivity(
+      adminId,
+      "DELETE_USER",
+      `Deleted user ${user.email}`,
+      { userId, email: user.email }
+    );
+
+    return { success: true, email: user.email };
+  },
+
   // GAP 6: Export donasi ke Excel
   async exportDonationsToExcel(status: string) {
     const where = status === "ALL" ? {} : { status: status as any };

@@ -86,6 +86,24 @@ export const adminController = {
     }
   },
 
+  async deleteUser(req: Request, res: Response) {
+    try {
+      const id = req.params.id as string;
+      const adminId = req.user!.userId;
+
+      if (id === adminId) {
+        res.status(400).json(errorResponse("Tidak dapat menghapus akun sendiri"));
+        return;
+      }
+
+      const result = await adminService.deleteUser(id, adminId);
+      res.json(successResponse(`Pengguna ${result.email} berhasil dihapus`, result));
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : "Terjadi kesalahan";
+      res.status(400).json(errorResponse(message));
+    }
+  },
+
   // GAP 6: Export laporan donasi ke Excel atau PDF
   async exportDonations(req: Request, res: Response) {
     try {

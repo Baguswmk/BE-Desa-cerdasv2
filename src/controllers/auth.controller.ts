@@ -1,4 +1,5 @@
 import { Request, Response } from "express";
+import { ZodError } from "zod";
 import { authService } from "../services/auth.service";
 import { registerSchema, loginSchema } from "../validations/auth.schema";
 import { successResponse, errorResponse } from "../utils/response";
@@ -11,9 +12,9 @@ export const authController = {
       const result = await authService.register(validatedData);
       res.status(201).json(successResponse("Registrasi berhasil", result));
     } catch (error: unknown) {
-      if (error instanceof Error && error.name === "ZodError") {
-        const zodError = error as Error & { errors?: unknown };
-        res.status(400).json(errorResponse("Validasi gagal", zodError.errors));
+      if (error instanceof ZodError) {
+        const message = error.issues[0]?.message ?? "Validasi gagal";
+        res.status(400).json(errorResponse(message));
       } else {
         const message =
           error instanceof Error ? error.message : "Terjadi kesalahan";
@@ -28,9 +29,9 @@ export const authController = {
       const result = await authService.login(validatedData);
       res.json(successResponse("Login berhasil", result));
     } catch (error: unknown) {
-      if (error instanceof Error && error.name === "ZodError") {
-        const zodError = error as Error & { errors?: unknown };
-        res.status(400).json(errorResponse("Validasi gagal", zodError.errors));
+      if (error instanceof ZodError) {
+        const message = error.issues[0]?.message ?? "Validasi gagal";
+        res.status(400).json(errorResponse(message));
       } else {
         const message =
           error instanceof Error ? error.message : "Terjadi kesalahan";
