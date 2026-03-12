@@ -27,16 +27,41 @@ export const kegiatanService = {
               : "ACTIVE",
           };
 
-    const kegiatan = await prisma.kegiatan.findMany({
+    let kegiatan = await prisma.kegiatan.findMany({
       where: whereClause,
       orderBy: { created_at: "desc" },
     });
+
+    // Auto-update status to COMPLETED if end_date has passed
+    const now = new Date();
+    const expiredKegiatanIds = kegiatan
+      .filter((k) => k.status === "ACTIVE" && k.end_date && new Date(k.end_date) < now)
+      .map((k) => k.id);
+
+    if (expiredKegiatanIds.length > 0) {
+      await prisma.kegiatan.updateMany({
+        where: { id: { in: expiredKegiatanIds } },
+        data: { status: "COMPLETED" },
+      });
+
+      // Refetch if status filter was applied to ensure correct data is returned
+      if (status !== "ALL") {
+        kegiatan = await prisma.kegiatan.findMany({
+          where: whereClause,
+          orderBy: { created_at: "desc" },
+        });
+      } else {
+        kegiatan = kegiatan.map((k) =>
+          expiredKegiatanIds.includes(k.id) ? { ...k, status: "COMPLETED" } : k
+        );
+      }
+    }
 
     return kegiatan;
   },
 
   async getById(id: string) {
-    const kegiatan = await prisma.kegiatan.findUnique({
+    let kegiatan = await prisma.kegiatan.findUnique({
       where: { id },
       include: {
         donations: {
@@ -61,6 +86,35 @@ export const kegiatanService = {
     });
 
     if (!kegiatan) throw new Error("Kegiatan tidak ditemukan");
+
+    // Auto-update status to COMPLETED if end_date has passed
+    if (kegiatan.status === "ACTIVE" && kegiatan.end_date && new Date(kegiatan.end_date) < new Date()) {
+      kegiatan = await prisma.kegiatan.update({
+        where: { id },
+        data: { status: "COMPLETED" },
+        include: {
+          donations: {
+            where: { status: "APPROVED" },
+            select: {
+              id: true,
+              amount: true,
+              donor_name: true,
+              message: true,
+              approved_at: true,
+              user: { select: { nama: true } },
+            },
+            orderBy: { approved_at: "desc" },
+          },
+          activity_updates: {
+            orderBy: { created_at: "desc" },
+          },
+          expense_reports: {
+            orderBy: { created_at: "desc" },
+          },
+        },
+      });
+    }
+
     return kegiatan;
   },
 
@@ -105,14 +159,31 @@ export const kegiatanService = {
     const existing = await prisma.kegiatan.findUnique({ where: { id } });
     if (!existing) throw new Error("Kegiatan tidak ditemukan");
 
+    let newStatus = existing.status;
+    if (existing.status !== "CANCELLED") {
+      const effectiveEndDate =
+        data.end_date !== undefined
+          ? data.end_date
+            ? new Date(data.end_date)
+            : null
+          : existing.end_date;
+
+      if (effectiveEndDate && new Date(effectiveEndDate) < new Date()) {
+        newStatus = "COMPLETED";
+      } else {
+        newStatus = "ACTIVE";
+      }
+    }
+
     const updated = await prisma.kegiatan.update({
       where: { id },
       data: {
+        status: newStatus,
         ...(data.title && { title: data.title }),
         ...(data.description && { description: data.description }),
         ...(data.target_amount && { target_amount: data.target_amount }),
         ...(data.start_date && { start_date: new Date(data.start_date) }),
-        ...(data.end_date && { end_date: new Date(data.end_date) }),
+        ...(data.end_date !== undefined ? { end_date: data.end_date ? new Date(data.end_date) : null } : {}),
         // Kalau ada foto baru di-submit → ganti semua; kalau tidak → biarkan
         ...(photos && photos.length > 0 && { photos }),
         ...(banner && { banner }),

@@ -118,10 +118,11 @@ Disclaimer: Ini adalah informasi umum untuk tujuan edukasi saja dan bukan merupa
   },
 
   async deleteHistorySession(userId: string, sessionId: string) {
+    const actualSessionId = sessionId === "null" ? null : sessionId;
     return prisma.aIQuery.deleteMany({
       where: {
         user_id: userId,
-        session_id: sessionId,
+        session_id: actualSessionId,
       },
     });
   },

@@ -252,10 +252,11 @@ Untuk hasil terbaik, konsultasikan dengan penyuluh pertanian di desa Anda.`;
   },
 
   async deleteFarmChatSession(userId: string, sessionId: string) {
+    const actualSessionId = sessionId === "null" ? null : sessionId;
     return prisma.farmChat.deleteMany({
       where: {
         user_id: userId,
-        session_id: sessionId,
+        session_id: actualSessionId,
       },
     });
   },
