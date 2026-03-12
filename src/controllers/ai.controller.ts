@@ -43,4 +43,25 @@ export const aiController = {
       res.status(400).json(errorResponse(error.message));
     }
   },
+
+  async getHistory(req: Request, res: Response) {
+    try {
+      const userId = req.user!.userId;
+      const history = await aiService.getHistory(userId);
+      res.json(successResponse("Berhasil mendapatkan riwayat", history));
+    } catch (error: any) {
+      res.status(400).json(errorResponse(error.message));
+    }
+  },
+
+  async deleteHistorySession(req: Request, res: Response) {
+    try {
+      const userId = req.user!.userId;
+      const sessionId = req.params.sessionId as string;
+      await aiService.deleteHistorySession(userId, sessionId);
+      res.json(successResponse("Berhasil menghapus riwayat obrolan", null));
+    } catch (error: any) {
+      res.status(400).json(errorResponse(error.message));
+    }
+  },
 };

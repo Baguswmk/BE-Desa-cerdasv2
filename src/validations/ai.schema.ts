@@ -5,6 +5,7 @@ export const aiQuerySchema = z.object({
     .string()
     .min(10, "Pertanyaan minimal 10 karakter")
     .max(500, "Pertanyaan maksimal 500 karakter"),
+  session_id: z.string().optional(),
 });
 
 export const smartFarmSchema = z.object({
@@ -18,6 +19,9 @@ export const farmChatSchema = z.object({
     .string()
     .min(5, "Pertanyaan minimal 5 karakter")
     .max(1000, "Pertanyaan maksimal 1000 karakter"),
+  latitude: z.number().optional(),
+  longitude: z.number().optional(),
+  session_id: z.string().optional(),
 });
 
 export type AIQueryInput = z.infer<typeof aiQuerySchema>;

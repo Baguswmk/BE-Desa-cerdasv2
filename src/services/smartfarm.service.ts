@@ -3,8 +3,12 @@ import { SmartFarmInput } from "../validations/ai.schema";
 import { weatherService } from "./weather.service";
 import { logger } from "../utils/logger";
 import { groqService } from "./groq.service";
+import { v4 as uuidv4 } from "uuid";
 
 const prisma = new PrismaClient();
+
+const FARM_QUOTA_LOGGED_IN = 50;
+const FARM_QUOTA_GUEST = 10;
 
 function sanitizeAIOutput(text: string): string {
   return text
@@ -130,16 +134,61 @@ Jawab dalam Bahasa Indonesia, ringkas, spesifik, dan mudah diterapkan petani des
     return { deleted: true, id: farmId };
   },
 
+  async checkQuota(userId?: string, ipAddress?: string): Promise<number> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const where: { created_at: { gte: Date }; user_id?: string | null; ip_address?: string } = {
+      created_at: { gte: today },
+    };
+
+    if (userId) {
+      where.user_id = userId;
+    } else if (ipAddress) {
+      where.ip_address = ipAddress;
+      where.user_id = null;
+    }
+
+    const count = await prisma.farmChat.count({ where });
+    const maxQuota = userId ? FARM_QUOTA_LOGGED_IN : FARM_QUOTA_GUEST;
+    return maxQuota - count;
+  },
+
   async askFarmQuestion(
     question: string,
+    sessionId?: string,
     userId?: string,
     ipAddress?: string,
+    latitude?: number,
+    longitude?: number,
   ) {
+    const remainingQuota = await this.checkQuota(userId, ipAddress);
+    if (remainingQuota <= 0) {
+      throw new Error("Kuota harian Smart Farm Anda sudah habis");
+    }
+
+    let weatherContext = "";
+
+    if (latitude && longitude) {
+      try {
+        const weatherResult = await weatherService.getWeatherByLocation(`${latitude},${longitude}`);
+        weatherContext = `\n\nInformasi Konteks Cuaca Pengguna Saat Ini (Berdasarkan Lokasi):
+- Suhu: ${weatherResult.temperature}°C
+- Kelembaban: ${weatherResult.humidity}%
+- Kondisi Cuaca: ${weatherResult.description}
+- Kecepatan angin: ${weatherResult.wind_speed} m/s
+
+Gunakan informasi cuaca dan lokasi di atas untuk merekomendasikan tanaman atau memberikan saran perawatan yang hiper-spesifik.`;
+      } catch (e) {
+        logger.warn("Gagal mengambil cuaca untuk konteks AI Chat: " + e);
+      }
+    }
+
     const systemPrompt = `Anda adalah ahli pertanian Indonesia yang ramah dan berpengalaman.
 Tugas Anda adalah menjawab pertanyaan seputar pertanian, peternakan, perikanan, dan pengelolaan lahan.
 Jawab dalam Bahasa Indonesia yang mudah dipahami oleh petani desa.
 Berikan saran yang praktis dan bisa langsung diterapkan.
-Jika pertanyaan di luar bidang pertanian, arahkan kembali ke topik pertanian.`;
+Jika pertanyaan di luar bidang pertanian, arahkan kembali ke topik pertanian.${weatherContext}`;
 
     let answer: string;
 
@@ -165,8 +214,12 @@ Untuk hasil terbaik, konsultasikan dengan penyuluh pertanian di desa Anda.`;
 
       const sanitizedAnswer = sanitizeAIOutput(answer);
 
+      // Use provided sessionId or generate a new one
+      const currentSessionId = sessionId || uuidv4();
+
       const chatRecord = await prisma.farmChat.create({
         data: {
+          session_id: currentSessionId,
           user_id: userId || null,
           ip_address: ipAddress || null,
           question,
@@ -175,9 +228,16 @@ Untuk hasil terbaik, konsultasikan dengan penyuluh pertanian di desa Anda.`;
       });
 
       logger.info(`Farm chat created: ${chatRecord.id} using ${groqService.getModel()}`);
-      return chatRecord;
+      return {
+        ...chatRecord,
+        session_id: currentSessionId,
+        remaining_quota: remainingQuota - 1,
+      };
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Unknown error";
+      if (message.includes("Kuota")) {
+        throw new Error(message);
+      }
       logger.error("Error in farm chat:", message);
       throw new Error("Gagal mendapatkan jawaban dari AI pertanian");
     }
@@ -187,7 +247,16 @@ Untuk hasil terbaik, konsultasikan dengan penyuluh pertanian di desa Anda.`;
     return prisma.farmChat.findMany({
       where: { user_id: userId },
       orderBy: { created_at: "desc" },
-      take: 50,
+      take: 200, // Increased limit so we can pull all rooms
+    });
+  },
+
+  async deleteFarmChatSession(userId: string, sessionId: string) {
+    return prisma.farmChat.deleteMany({
+      where: {
+        user_id: userId,
+        session_id: sessionId,
+      },
     });
   },
 };

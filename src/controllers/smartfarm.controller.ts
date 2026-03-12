@@ -71,8 +71,11 @@ export const smartFarmController = {
 
       const chatRecord = await smartFarmService.askFarmQuestion(
         validatedData.question,
+        validatedData.session_id,
         userId,
         ipAddress,
+        validatedData.latitude,
+        validatedData.longitude
       );
 
       res.status(201).json(successResponse("Berhasil mendapatkan jawaban", chatRecord));
@@ -90,6 +93,34 @@ export const smartFarmController = {
       const userId = req.user!.userId;
       const history = await smartFarmService.getFarmChatHistory(userId);
       res.json(successResponse("Berhasil mendapatkan riwayat chat", history));
+    } catch (error: any) {
+      res.status(400).json(errorResponse(error.message));
+    }
+  },
+
+  async getQuota(req: Request, res: Response) {
+    try {
+      const userId = req.user?.userId;
+      const ipAddress = req.ip || req.socket.remoteAddress || "unknown";
+
+      const quota = await smartFarmService.checkQuota(userId, ipAddress);
+
+      res.json(
+        successResponse("Berhasil mendapatkan kuota", {
+          remaining_quota: quota,
+        }),
+      );
+    } catch (error: any) {
+      res.status(400).json(errorResponse(error.message));
+    }
+  },
+
+  async deleteFarmChatSession(req: Request, res: Response) {
+    try {
+      const userId = req.user!.userId;
+      const sessionId = req.params.sessionId as string;
+      await smartFarmService.deleteFarmChatSession(userId, sessionId);
+      res.json(successResponse("Berhasil menghapus riwayat obrolan", null));
     } catch (error: any) {
       res.status(400).json(errorResponse(error.message));
     }

@@ -1,6 +1,7 @@
 import { PrismaClient } from "@prisma/client";
 import { logger } from "../utils/logger";
 import { groqService } from "./groq.service";
+import { v4 as uuidv4 } from "uuid";
 
 const prisma = new PrismaClient();
 
@@ -38,6 +39,7 @@ export const aiService = {
 
   async askLegalQuestion(
     question: string,
+    sessionId?: string,
     userId?: string,
     ipAddress?: string,
   ) {
@@ -77,8 +79,12 @@ Disclaimer: Ini adalah informasi umum untuk tujuan edukasi saja dan bukan merupa
 
       const sanitizedAnswer = sanitizeAIOutput(answer);
 
+      // Use provided sessionId or generate a new one
+      const currentSessionId = sessionId || uuidv4();
+
       const aiQuery = await prisma.aIQuery.create({
         data: {
+          session_id: currentSessionId,
           user_id: userId,
           ip_address: ipAddress,
           question,
@@ -89,6 +95,7 @@ Disclaimer: Ini adalah informasi umum untuk tujuan edukasi saja dan bukan merupa
       logger.info(`AI query created: ${aiQuery.id} using ${groqService.getModel()}`);
 
       return {
+        session_id: currentSessionId,
         question,
         answer: sanitizedAnswer,
         remaining_quota: remainingQuota - 1,
@@ -101,5 +108,21 @@ Disclaimer: Ini adalah informasi umum untuk tujuan edukasi saja dan bukan merupa
       logger.error("Error calling Groq API:", message);
       throw new Error("Gagal mendapatkan jawaban dari AI. Silakan coba lagi.");
     }
+  },
+
+  async getHistory(userId: string) {
+    return prisma.aIQuery.findMany({
+      where: { user_id: userId },
+      orderBy: { created_at: "desc" },
+    });
+  },
+
+  async deleteHistorySession(userId: string, sessionId: string) {
+    return prisma.aIQuery.deleteMany({
+      where: {
+        user_id: userId,
+        session_id: sessionId,
+      },
+    });
   },
 };

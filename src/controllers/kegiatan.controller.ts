@@ -9,13 +9,34 @@ import {
 import { successResponse, errorResponse } from "../utils/response";
 import path from "path";
 import fs from "fs";
+import { PrismaClient } from "@prisma/client";
+
+const prisma = new PrismaClient();
 
 export const kegiatanController = {
   async getAll(req: Request, res: Response) {
     try {
       const status = req.query.status as string | undefined;
       const kegiatan = await kegiatanService.getAll(status);
-      res.json(successResponse("Berhasil mendapatkan data kegiatan", kegiatan));
+
+      // Fetch stats for public homepage and donasi page
+      const [total_warga, total_kegiatan_active] = await Promise.all([
+        prisma.user.count({ where: { role: "WARGA" } }),
+        prisma.kegiatan.count({ where: { status: "ACTIVE" } }),
+      ]);
+      const donationSum = await prisma.donation.aggregate({
+        where: { status: "APPROVED" },
+        _sum: { amount: true },
+      });
+
+      res.json(successResponse("Berhasil mendapatkan data kegiatan", {
+        data: kegiatan,
+        stats: {
+          total_warga,
+          total_kegiatan: total_kegiatan_active,
+          total_dana: donationSum._sum.amount || 0,
+        }
+      }));
     } catch (error: unknown) {
       const message =
         error instanceof Error ? error.message : "Terjadi kesalahan";
