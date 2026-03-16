@@ -13,6 +13,7 @@ export const aiController = {
 
       const result = await aiService.askLegalQuestion(
         validatedData.question,
+        validatedData.session_id,
         userId,
         ipAddress,
       );
